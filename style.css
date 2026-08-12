@@ -1,0 +1,412 @@
+/* ==========================================================================
+   AstraToonix Quiz Portal — design tokens & custom styling
+   Tailwind handles layout utilities; this file carries the brand identity:
+   palette, type, the starfield, the profile "orbit" ring, confetti canvas,
+   feedback states and motion.
+   ========================================================================== */
+
+:root {
+  /* Palette */
+  --astra-bg-0: #0B0F2B;      /* deep space navy - page background */
+  --astra-bg-1: #141A3D;      /* card surface */
+  --astra-bg-2: #1C2450;      /* raised / hover surface */
+  --astra-fg: #F4F1EA;        /* warm off-white text */
+  --astra-muted: #9AA1C7;     /* secondary text */
+  --astra-cyan: #4CE0D2;      /* electric cyan accent */
+  --astra-magenta: #B357FF;   /* portal magenta accent */
+  --astra-gold: #FFD166;      /* star gold - celebration */
+  --astra-wrong: #FF6B6B;     /* wrong-answer red */
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background: var(--astra-bg-0);
+  color: var(--astra-fg);
+  font-family: 'Inter', system-ui, sans-serif;
+  margin: 0;
+}
+
+.font-display { font-family: 'Baloo 2', 'Inter', system-ui, sans-serif; }
+.font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+.text-astra-fg { color: var(--astra-fg); }
+.text-astra-muted { color: var(--astra-muted); }
+.text-astra-cyan { color: var(--astra-cyan); }
+.text-astra-wrong { color: var(--astra-wrong); }
+
+/* ==========================================================================
+   Starfield background
+   ========================================================================== */
+.starfield {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(179, 87, 255, 0.15), transparent 55%),
+    radial-gradient(ellipse at 80% 85%, rgba(76, 224, 210, 0.12), transparent 55%),
+    var(--astra-bg-0);
+}
+
+.stars {
+  position: absolute;
+  inset: -10%;
+  background-repeat: repeat;
+}
+
+.stars-sm {
+  background-image: radial-gradient(1px 1px at 20px 30px, #fff, transparent),
+                     radial-gradient(1px 1px at 90px 70px, #fff, transparent),
+                     radial-gradient(1px 1px at 150px 20px, #fff, transparent),
+                     radial-gradient(1px 1px at 200px 120px, #fff, transparent);
+  background-size: 220px 180px;
+  opacity: 0.35;
+  animation: drift 90s linear infinite;
+}
+
+.stars-md {
+  background-image: radial-gradient(1.5px 1.5px at 60px 100px, var(--astra-cyan), transparent),
+                     radial-gradient(1.5px 1.5px at 180px 40px, var(--astra-magenta), transparent),
+                     radial-gradient(1.5px 1.5px at 260px 160px, #fff, transparent);
+  background-size: 320px 260px;
+  opacity: 0.4;
+  animation: drift 140s linear infinite reverse;
+}
+
+.stars-lg {
+  background-image: radial-gradient(2px 2px at 100px 50px, var(--astra-gold), transparent),
+                     radial-gradient(2px 2px at 240px 200px, #fff, transparent);
+  background-size: 420px 380px;
+  opacity: 0.3;
+  animation: drift 200s linear infinite;
+}
+
+@keyframes drift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-400px, -300px, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stars { animation: none !important; }
+}
+
+/* ==========================================================================
+   Profile "orbit" ring — signature element
+   ========================================================================== */
+.profile-ring {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 9999px;
+  padding: 4px;
+  background: conic-gradient(from 0deg, var(--astra-cyan), var(--astra-magenta), var(--astra-gold), var(--astra-cyan));
+  animation: spin-ring 6s linear infinite;
+  cursor: pointer;
+  border: none;
+  display: block;
+}
+
+.profile-ring:hover { animation-duration: 2.5s; }
+
+.profile-ring img {
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 3px solid var(--astra-bg-0);
+  display: block;
+}
+
+@keyframes spin-ring {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-ring { animation: none; }
+}
+
+/* ==========================================================================
+   Cards & surfaces
+   ========================================================================== */
+.card {
+  background: linear-gradient(180deg, var(--astra-bg-1), var(--astra-bg-0) 140%);
+  border: 1px solid rgba(154, 161, 199, 0.15);
+  border-radius: 20px;
+  padding: 1.75rem;
+  box-shadow: 0 20px 50px -20px rgba(0,0,0,0.6);
+}
+
+/* ==========================================================================
+   Form controls
+   ========================================================================== */
+.field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--astra-muted);
+  margin-bottom: 0.4rem;
+}
+
+.file-input {
+  width: 100%;
+  font-size: 0.85rem;
+  color: var(--astra-muted);
+  padding: 0.5rem 0;
+}
+
+.file-input::file-selector-button {
+  background: var(--astra-bg-2);
+  color: var(--astra-fg);
+  border: 1px solid rgba(154, 161, 199, 0.25);
+  border-radius: 10px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-right: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.file-input::file-selector-button:hover { background: var(--astra-bg-1); }
+
+.select-input {
+  width: 100%;
+  background: var(--astra-bg-2);
+  color: var(--astra-fg);
+  border: 1px solid rgba(154, 161, 199, 0.25);
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.9rem;
+  appearance: none;
+}
+
+.select-input:focus, .file-input:focus, .btn-primary:focus, .btn-ghost:focus, .option-btn:focus {
+  outline: 2px solid var(--astra-cyan);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+.btn-primary {
+  background: linear-gradient(135deg, var(--astra-cyan), var(--astra-magenta));
+  color: #0B0F2B;
+  font-weight: 700;
+  font-family: 'Baloo 2', sans-serif;
+  border: none;
+  border-radius: 14px;
+  padding: 0.85rem 1.5rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 10px 25px -10px rgba(76, 224, 210, 0.5);
+}
+
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--astra-muted);
+  font-weight: 600;
+  border: 1px solid rgba(154, 161, 199, 0.3);
+  border-radius: 12px;
+  padding: 0.7rem 1.2rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-ghost:hover { color: var(--astra-fg); border-color: var(--astra-cyan); }
+
+/* ==========================================================================
+   Quiz screen
+   ========================================================================== */
+.progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--astra-bg-2);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--astra-cyan), var(--astra-magenta));
+  transition: width 0.35s ease;
+}
+
+.timer-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--astra-bg-2);
+  border: 2px solid var(--astra-cyan);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  transition: border-color 0.3s ease, color 0.3s ease;
+}
+
+.timer-badge.timer-warning { border-color: var(--astra-gold); color: var(--astra-gold); }
+.timer-badge.timer-danger { border-color: var(--astra-wrong); color: var(--astra-wrong); animation: pulse-danger 0.6s ease-in-out infinite; }
+
+@keyframes pulse-danger {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.option-btn {
+  width: 100%;
+  text-align: left;
+  background: var(--astra-bg-2);
+  border: 1px solid rgba(154, 161, 199, 0.2);
+  border-radius: 14px;
+  padding: 0.9rem 1.1rem;
+  font-size: 0.92rem;
+  color: var(--astra-fg);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.option-btn:hover:not(:disabled) {
+  border-color: var(--astra-cyan);
+  transform: translateY(-1px);
+}
+
+.option-btn:disabled { cursor: default; }
+
+.option-btn.correct {
+  background: rgba(76, 224, 210, 0.15);
+  border-color: var(--astra-cyan);
+  animation: pop 0.35s ease;
+}
+
+.option-btn.wrong {
+  background: rgba(255, 107, 107, 0.15);
+  border-color: var(--astra-wrong);
+  animation: shake 0.4s ease;
+}
+
+.option-btn.reveal-correct {
+  border-color: var(--astra-cyan);
+  box-shadow: inset 0 0 0 1px var(--astra-cyan);
+}
+
+@keyframes pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.feedback-banner {
+  margin-top: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-align: center;
+  animation: fade-slide-in 0.25s ease;
+}
+
+.feedback-banner.correct { background: rgba(76, 224, 210, 0.12); color: var(--astra-cyan); }
+.feedback-banner.wrong { background: rgba(255, 107, 107, 0.12); color: var(--astra-wrong); }
+
+@keyframes fade-slide-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Results screen
+   ========================================================================== */
+.score-ring-wrap { display: flex; justify-content: center; }
+
+.score-ring {
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  background: conic-gradient(var(--astra-cyan) calc(var(--pct, 0) * 1%), var(--astra-bg-2) 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.score-ring::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 999px;
+  background: var(--astra-bg-1);
+}
+
+.score-ring span { position: relative; z-index: 1; }
+
+/* ==========================================================================
+   Modal / lightbox
+   ========================================================================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 15, 43, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 2rem;
+  animation: fade-slide-in 0.2s ease;
+}
+
+.modal-overlay.hidden { display: none; }
+
+.modal-img {
+  max-width: min(90vw, 480px);
+  max-height: 80vh;
+  border-radius: 20px;
+  border: 3px solid var(--astra-cyan);
+  box-shadow: 0 25px 60px -15px rgba(0,0,0,0.7);
+}
+
+.modal-close {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.5rem;
+  background: none;
+  border: none;
+  color: var(--astra-fg);
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Confetti canvas
+   ========================================================================== */
+.confetti-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* ==========================================================================
+   Utility
+   ========================================================================== */
+.hidden { display: none !important; }
+
+@media (max-width: 420px) {
+  .card { padding: 1.25rem; border-radius: 16px; }
+}
