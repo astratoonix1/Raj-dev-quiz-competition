@@ -1,0 +1,613 @@
+/* ==========================================================================
+   AstraToonix Quiz Portal — script.js
+   Vanilla JS, no build step. Everything you're likely to want to tweak
+   lives in the CONFIG object right below — edit that first.
+   ========================================================================== */
+
+const CONFIG = {
+  // ⚙️ Default sample questions, used when the user clicks "Use sample
+  // questions" or hasn't uploaded a file yet. Replace / extend freely, or
+  // just rely on the JSON upload in Setup mode instead.
+  sampleQuestions: [
+    {
+      question: "Which planet is known as the Red Planet?",
+      options: ["Venus", "Mars", "Jupiter", "Saturn"],
+      answer: "Mars"
+    },
+    {
+      question: "What does HTML stand for?",
+      options: [
+        "Hyper Trainer Marking Language",
+        "HyperText Markup Language",
+        "Hyperlinks and Text Markup Language",
+        "Home Tool Markup Language"
+      ],
+      answer: 1
+    },
+    {
+      question: "Which of these is a JavaScript framework/library?",
+      options: ["Laravel", "Django", "React", "Rails"],
+      answer: "React"
+    },
+    {
+      question: "How many continents are there on Earth?",
+      options: ["5", "6", "7", "8"],
+      answer: "7"
+    },
+    {
+      question: "What is the chemical symbol for gold?",
+      options: ["Go", "Gd", "Au", "Ag"],
+      answer: "Au"
+    },
+    {
+      question: "Which ocean is the largest?",
+      options: ["Atlantic", "Indian", "Arctic", "Pacific"],
+      answer: 3
+    }
+  ],
+
+  // ⚙️ Default number of seconds per question, and the choices offered in
+  // Setup mode. The <select id="timer-select"> in index.html mirrors this.
+  defaultTimerSeconds: 20,
+
+  // ⚙️ Path to the victory song. Place your MP3 at this path in the repo
+  // (e.g. create an "assets" folder next to index.html and drop the file
+  // in as assets/victory-song.mp3), OR let the user override it at
+  // runtime with the "Victory song" file picker in Setup mode.
+  victorySongPath: "assets/victory-song.mp3",
+
+  // ⚙️ Optional path to a custom "wrong answer" sound effect. If this file
+  // doesn't exist, the app automatically falls back to a built-in beep
+  // generated with the Web Audio API, so nothing breaks if you skip this.
+  wrongSoundPath: "assets/wrong-sound.mp3",
+
+  // ⚙️ How many confetti particles to spawn per correct answer / on victory.
+  confettiBurstSize: 60,
+  confettiVictoryMultiplier: 3
+};
+
+/* ==========================================================================
+   State
+   ========================================================================== */
+const state = {
+  allQuestions: [],       // full pool loaded from JSON / sample
+  quizQuestions: [],      // the subset actually used this run
+  currentIndex: 0,
+  score: 0,
+  timerSeconds: CONFIG.defaultTimerSeconds,
+  timerRemaining: 0,
+  timerInterval: null,
+  answered: false,
+  victorySongOverrideUrl: null
+};
+
+/* ==========================================================================
+   Element references
+   ========================================================================== */
+const el = {
+  setupScreen: document.getElementById('setup-screen'),
+  quizScreen: document.getElementById('quiz-screen'),
+  resultsScreen: document.getElementById('results-screen'),
+
+  jsonUpload: document.getElementById('json-upload'),
+  useSampleBtn: document.getElementById('use-sample-btn'),
+  sourceStatus: document.getElementById('question-source-status'),
+  pasteJsonToggle: document.getElementById('paste-json-toggle'),
+  pasteJsonPanel: document.getElementById('paste-json-panel'),
+  pasteJsonInput: document.getElementById('paste-json-input'),
+  pasteJsonLoad: document.getElementById('paste-json-load'),
+  questionCountSelect: document.getElementById('question-count'),
+  questionCountHint: document.getElementById('question-count-hint'),
+  timerSelect: document.getElementById('timer-select'),
+  songUpload: document.getElementById('song-upload'),
+  songStatus: document.getElementById('song-source-status'),
+  startBtn: document.getElementById('start-quiz-btn'),
+  setupError: document.getElementById('setup-error'),
+
+  questionProgress: document.getElementById('question-progress'),
+  timerBadge: document.getElementById('timer-badge'),
+  timerValue: document.getElementById('timer-value'),
+  progressFill: document.getElementById('progress-fill'),
+  questionText: document.getElementById('question-text'),
+  optionsList: document.getElementById('options-list'),
+  feedbackBanner: document.getElementById('feedback-banner'),
+
+  resultsIcon: document.getElementById('results-icon'),
+  resultsTitle: document.getElementById('results-title'),
+  resultsSubtitle: document.getElementById('results-subtitle'),
+  scoreRing: document.querySelector('.score-ring'),
+  scoreFraction: document.getElementById('score-fraction'),
+  victoryPlayer: document.getElementById('victory-player'),
+  victoryAudio: document.getElementById('victory-audio'),
+  retryBtn: document.getElementById('retry-btn'),
+  newQuizBtn: document.getElementById('new-quiz-btn'),
+
+  profileTrigger: document.getElementById('profile-trigger'),
+  profileModal: document.getElementById('profile-modal'),
+  modalImg: document.getElementById('modal-img'),
+  modalClose: document.getElementById('modal-close'),
+
+  wrongAudio: document.getElementById('wrong-audio'),
+  confettiCanvas: document.getElementById('confetti-canvas')
+};
+
+/* ==========================================================================
+   Setup mode — loading questions
+   ========================================================================== */
+function normalizeQuestions(raw) {
+  const list = Array.isArray(raw) ? raw : raw.questions;
+  if (!Array.isArray(list)) throw new Error('JSON must contain a "questions" array.');
+
+  return list.map((q, i) => {
+    if (!q.question || !Array.isArray(q.options) || q.options.length < 2) {
+      throw new Error(`Question ${i + 1} is missing "question" text or has fewer than 2 "options".`);
+    }
+    let correctIndex;
+    if (typeof q.answer === 'number') {
+      correctIndex = q.answer;
+    } else if (typeof q.answer === 'string') {
+      correctIndex = q.options.findIndex(
+        opt => opt.trim().toLowerCase() === q.answer.trim().toLowerCase()
+      );
+    } else {
+      correctIndex = -1;
+    }
+    if (correctIndex < 0 || correctIndex >= q.options.length) {
+      throw new Error(`Question ${i + 1}'s "answer" doesn't match any of its options.`);
+    }
+    return { question: q.question, options: q.options, correctIndex };
+  });
+}
+
+function setQuestionPool(questions, sourceLabel) {
+  state.allQuestions = questions;
+  el.sourceStatus.textContent = `${sourceLabel} — ${questions.length} question${questions.length === 1 ? '' : 's'} loaded.`;
+  configureQuestionCountInput(questions.length);
+  el.startBtn.disabled = false;
+  hideSetupError();
+}
+
+// The count field is a plain, typeable number input (not a limited dropdown)
+// so people can ask for 10, 100, 500, 900... anything up to how many
+// questions are actually loaded.
+function configureQuestionCountInput(total) {
+  el.questionCountSelect.max = String(total);
+  el.questionCountSelect.min = '1';
+  el.questionCountSelect.value = String(Math.min(10, total));
+  el.questionCountHint.textContent = `Type any amount from 1 to ${total} (all ${total} loaded).`;
+}
+
+function showSetupError(message) {
+  el.setupError.textContent = message;
+  el.setupError.classList.remove('hidden');
+}
+
+function hideSetupError() {
+  el.setupError.classList.add('hidden');
+}
+
+el.jsonUpload.addEventListener('change', async () => {
+  const file = el.jsonUpload.files[0];
+  if (!file) return;
+
+  // Give immediate feedback the moment a file is picked, so it never looks
+  // like nothing happened while the file is being read.
+  el.sourceStatus.textContent = `Reading "${file.name}"…`;
+  hideSetupError();
+
+  try {
+    const text = await file.text();
+    loadQuestionsFromJsonText(text, `"${file.name}"`);
+  } catch (err) {
+    console.error('File read error:', err);
+    showSetupError(`Couldn't read that file: ${err.message}. Try "Paste JSON instead" below if this keeps happening.`);
+    el.sourceStatus.textContent = 'No file loaded yet.';
+    el.startBtn.disabled = true;
+  } finally {
+    // Reset so picking the exact same file a second time still fires "change".
+    el.jsonUpload.value = '';
+  }
+});
+
+function loadQuestionsFromJsonText(text, sourceLabel) {
+  try {
+    const parsed = JSON.parse(text);
+    const questions = normalizeQuestions(parsed);
+    setQuestionPool(questions, sourceLabel);
+  } catch (err) {
+    console.error('JSON parse error:', err);
+    showSetupError(`Couldn't load that: ${err.message}`);
+    el.sourceStatus.textContent = 'No file loaded yet.';
+    el.startBtn.disabled = true;
+  }
+}
+
+el.useSampleBtn.addEventListener('click', () => {
+  const questions = normalizeQuestions(CONFIG.sampleQuestions);
+  setQuestionPool(questions, 'Sample questions');
+  el.jsonUpload.value = '';
+});
+
+// Fallback path in case a phone's native file picker won't cooperate: let
+// the person paste the JSON text directly instead.
+el.pasteJsonToggle.addEventListener('click', () => {
+  el.pasteJsonPanel.classList.toggle('hidden');
+});
+
+el.pasteJsonLoad.addEventListener('click', () => {
+  const text = el.pasteJsonInput.value.trim();
+  if (!text) {
+    showSetupError('Paste some JSON text first.');
+    return;
+  }
+  loadQuestionsFromJsonText(text, 'Pasted JSON');
+});
+
+el.songUpload.addEventListener('change', () => {
+  const file = el.songUpload.files[0];
+  if (!file) return;
+  if (state.victorySongOverrideUrl) URL.revokeObjectURL(state.victorySongOverrideUrl);
+  state.victorySongOverrideUrl = URL.createObjectURL(file);
+  el.songStatus.textContent = `Using uploaded file: "${file.name}"`;
+});
+
+/* ==========================================================================
+   Starting the quiz
+   ========================================================================== */
+function shuffle(array) {
+  const copy = array.slice();
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+el.startBtn.addEventListener('click', () => {
+  if (!state.allQuestions.length) {
+    showSetupError('Load a question file or use the sample questions first.');
+    return;
+  }
+
+  const total = state.allQuestions.length;
+  let requested = parseInt(el.questionCountSelect.value, 10);
+  if (!Number.isFinite(requested) || requested < 1) requested = Math.min(10, total);
+  requested = Math.min(requested, total);
+
+  state.timerSeconds = Number(el.timerSelect.value);
+  drawFreshQuestionSet(requested);
+
+  switchScreen('quiz');
+  renderQuestion();
+});
+
+// Picks a brand-new random subset, in a brand-new random order, from the
+// full loaded pool. Used both for the initial start and for "Try Again" so
+// no run ever repeats the same questions in the same order — every attempt
+// can pull from anywhere in the set (start, middle, end, wherever).
+function drawFreshQuestionSet(count) {
+  state.quizQuestions = shuffle(state.allQuestions).slice(0, count);
+  state.currentIndex = 0;
+  state.score = 0;
+}
+
+/* ==========================================================================
+   Quiz engine
+   ========================================================================== */
+function renderQuestion() {
+  clearInterval(state.timerInterval);
+  state.answered = false;
+  el.feedbackBanner.classList.add('hidden');
+  el.feedbackBanner.textContent = '';
+
+  const q = state.quizQuestions[state.currentIndex];
+  const total = state.quizQuestions.length;
+
+  el.questionProgress.textContent = `Question ${state.currentIndex + 1} / ${total}`;
+  el.progressFill.style.width = `${(state.currentIndex / total) * 100}%`;
+  el.questionText.textContent = q.question;
+
+  el.optionsList.innerHTML = '';
+  shuffleOptionsForDisplay(q).forEach(({ text, index }) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.textContent = text;
+    btn.dataset.optionIndex = index;
+    btn.setAttribute('role', 'listitem');
+    btn.addEventListener('click', () => handleAnswer(index, btn));
+    el.optionsList.appendChild(btn);
+  });
+
+  startTimer();
+}
+
+// Options are shuffled for display only; correctIndex on the question
+// object still refers to the original options array, so we track each
+// button's real index via dataset.
+function shuffleOptionsForDisplay(q) {
+  const withIndex = q.options.map((text, index) => ({ text, index }));
+  return shuffle(withIndex);
+}
+
+function startTimer() {
+  el.timerBadge.classList.remove('timer-warning', 'timer-danger');
+
+  if (state.timerSeconds === 0) {
+    el.timerValue.textContent = '∞';
+    return;
+  }
+
+  state.timerRemaining = state.timerSeconds;
+  el.timerValue.textContent = state.timerRemaining;
+
+  state.timerInterval = setInterval(() => {
+    state.timerRemaining--;
+    el.timerValue.textContent = state.timerRemaining;
+
+    if (state.timerRemaining <= Math.ceil(state.timerSeconds * 0.5) && state.timerRemaining > Math.ceil(state.timerSeconds * 0.25)) {
+      el.timerBadge.classList.add('timer-warning');
+    } else if (state.timerRemaining <= Math.ceil(state.timerSeconds * 0.25)) {
+      el.timerBadge.classList.remove('timer-warning');
+      el.timerBadge.classList.add('timer-danger');
+    }
+
+    if (state.timerRemaining <= 0) {
+      clearInterval(state.timerInterval);
+      handleTimeout();
+    }
+  }, 1000);
+}
+
+function handleTimeout() {
+  if (state.answered) return;
+  state.answered = true;
+  const q = state.quizQuestions[state.currentIndex];
+
+  // Reveal the correct answer, mark nothing as "wrong" since nothing was picked.
+  [...el.optionsList.children].forEach(btn => {
+    btn.disabled = true;
+    if (Number(btn.dataset.optionIndex) === q.correctIndex) {
+      btn.classList.add('reveal-correct');
+    }
+  });
+
+  showFeedback(false, "⏱ Time's up!");
+  playWrongCue();
+  advanceAfterDelay();
+}
+
+function handleAnswer(selectedIndex, btnEl) {
+  if (state.answered) return;
+  state.answered = true;
+  clearInterval(state.timerInterval);
+
+  const q = state.quizQuestions[state.currentIndex];
+  const isCorrect = selectedIndex === q.correctIndex;
+
+  [...el.optionsList.children].forEach(btn => {
+    btn.disabled = true;
+    const idx = Number(btn.dataset.optionIndex);
+    if (idx === q.correctIndex) btn.classList.add('correct');
+    else if (btn === btnEl) btn.classList.add('wrong');
+  });
+
+  if (isCorrect) {
+    state.score++;
+    showFeedback(true, '🎉 Correct!');
+    launchConfetti(CONFIG.confettiBurstSize);
+  } else {
+    showFeedback(false, '❌ Wrong answer');
+    playWrongCue();
+  }
+
+  advanceAfterDelay();
+}
+
+function showFeedback(isCorrect, message) {
+  el.feedbackBanner.textContent = message;
+  el.feedbackBanner.classList.remove('hidden', 'correct', 'wrong');
+  el.feedbackBanner.classList.add(isCorrect ? 'correct' : 'wrong');
+}
+
+function advanceAfterDelay() {
+  setTimeout(() => {
+    state.currentIndex++;
+    if (state.currentIndex >= state.quizQuestions.length) {
+      finishQuiz();
+    } else {
+      renderQuestion();
+    }
+  }, 1400);
+}
+
+/* ==========================================================================
+   Results
+   ========================================================================== */
+function finishQuiz() {
+  clearInterval(state.timerInterval);
+  el.progressFill.style.width = '100%';
+
+  const total = state.quizQuestions.length;
+  const perfect = state.score === total;
+
+  switchScreen('results');
+
+  el.scoreFraction.textContent = `${state.score} / ${total}`;
+  el.scoreRing.style.setProperty('--pct', String(Math.round((state.score / total) * 100)));
+
+  if (perfect) {
+    el.resultsIcon.textContent = '🏆';
+    el.resultsTitle.textContent = 'Perfect Score!';
+    el.resultsSubtitle.textContent = 'Every question, correct. The victory track is yours.';
+    el.victoryPlayer.classList.remove('hidden');
+    playVictorySong();
+    launchConfetti(CONFIG.confettiBurstSize * CONFIG.confettiVictoryMultiplier);
+  } else {
+    el.resultsIcon.textContent = '🌠';
+    el.resultsTitle.textContent = 'Nice Run';
+    el.resultsSubtitle.textContent = `You got ${state.score} out of ${total}. Answer them all to unlock the victory track.`;
+    el.victoryPlayer.classList.add('hidden');
+    el.victoryAudio.pause();
+  }
+}
+
+function playVictorySong() {
+  const src = state.victorySongOverrideUrl || CONFIG.victorySongPath;
+  el.victoryAudio.src = src;
+  el.victoryAudio.play().catch(() => {
+    // Autoplay can be blocked by the browser; the visible <audio> controls
+    // let the user press play manually, so we fail silently here.
+  });
+}
+
+el.retryBtn.addEventListener('click', () => {
+  // Draw a brand-new random set from the full pool rather than replaying
+  // the exact same questions in the exact same order.
+  drawFreshQuestionSet(state.quizQuestions.length);
+  switchScreen('quiz');
+  renderQuestion();
+});
+
+el.newQuizBtn.addEventListener('click', () => {
+  el.victoryAudio.pause();
+  switchScreen('setup');
+});
+
+/* ==========================================================================
+   Screen switching
+   ========================================================================== */
+function switchScreen(name) {
+  el.setupScreen.classList.toggle('hidden', name !== 'setup');
+  el.quizScreen.classList.toggle('hidden', name !== 'quiz');
+  el.resultsScreen.classList.toggle('hidden', name !== 'results');
+}
+
+/* ==========================================================================
+   Audio cues
+   ========================================================================== */
+let audioCtx = null;
+
+function playWrongCue() {
+  // Prefer a custom file if one has been configured/exists; otherwise fall
+  // back to a short synthesized beep via the Web Audio API.
+  if (CONFIG.wrongSoundPath) {
+    el.wrongAudio.src = CONFIG.wrongSoundPath;
+    el.wrongAudio.play().catch(() => playBeep());
+    el.wrongAudio.onerror = () => playBeep();
+  } else {
+    playBeep();
+  }
+}
+
+function playBeep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 220;
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.4);
+  } catch (e) {
+    // Audio isn't critical to functionality; ignore if unsupported.
+  }
+}
+
+/* ==========================================================================
+   Confetti (lightweight vanilla canvas particle burst)
+   ========================================================================== */
+const confettiCtx = el.confettiCanvas.getContext('2d');
+let confettiParticles = [];
+let confettiRAF = null;
+
+function resizeConfettiCanvas() {
+  el.confettiCanvas.width = window.innerWidth;
+  el.confettiCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeConfettiCanvas);
+resizeConfettiCanvas();
+
+const CONFETTI_COLORS = ['#4CE0D2', '#B357FF', '#FFD166', '#F4F1EA', '#FF6B6B'];
+
+function launchConfetti(count) {
+  const originX = window.innerWidth / 2;
+  const originY = window.innerHeight * 0.35;
+
+  for (let i = 0; i < count; i++) {
+    confettiParticles.push({
+      x: originX + (Math.random() - 0.5) * 120,
+      y: originY,
+      vx: (Math.random() - 0.5) * 8,
+      vy: Math.random() * -8 - 3,
+      size: Math.random() * 6 + 4,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      rotation: Math.random() * 360,
+      rotationSpeed: (Math.random() - 0.5) * 10,
+      gravity: 0.25 + Math.random() * 0.1,
+      life: 0,
+      maxLife: 90 + Math.random() * 30
+    });
+  }
+
+  if (!confettiRAF) confettiTick();
+}
+
+function confettiTick() {
+  confettiCtx.clearRect(0, 0, el.confettiCanvas.width, el.confettiCanvas.height);
+
+  confettiParticles.forEach(p => {
+    p.vy += p.gravity;
+    p.x += p.vx;
+    p.y += p.vy;
+    p.rotation += p.rotationSpeed;
+    p.life++;
+
+    const alpha = Math.max(0, 1 - p.life / p.maxLife);
+    confettiCtx.save();
+    confettiCtx.translate(p.x, p.y);
+    confettiCtx.rotate((p.rotation * Math.PI) / 180);
+    confettiCtx.globalAlpha = alpha;
+    confettiCtx.fillStyle = p.color;
+    confettiCtx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+    confettiCtx.restore();
+  });
+
+  confettiParticles = confettiParticles.filter(p => p.life < p.maxLife && p.y < el.confettiCanvas.height + 50);
+
+  if (confettiParticles.length > 0) {
+    confettiRAF = requestAnimationFrame(confettiTick);
+  } else {
+    confettiRAF = null;
+    confettiCtx.clearRect(0, 0, el.confettiCanvas.width, el.confettiCanvas.height);
+  }
+}
+
+/* ==========================================================================
+   Profile picture lightbox
+   ========================================================================== */
+el.profileTrigger.addEventListener('click', () => {
+  el.modalImg.src = document.getElementById('profile-pic').src;
+  el.profileModal.classList.remove('hidden');
+});
+
+el.modalClose.addEventListener('click', closeModal);
+el.profileModal.addEventListener('click', (e) => {
+  if (e.target === el.profileModal) closeModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+function closeModal() {
+  el.profileModal.classList.add('hidden');
+}
+
+/* ==========================================================================
+   Init
+   ========================================================================== */
+(function init() {
+  el.startBtn.disabled = true;
+})();
