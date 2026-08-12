@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AstraToonix Quiz Portal</title>
+<meta name="description" content="An interactive quiz built by Raj Dev / AstraToonix" />
+
+<!-- Tailwind CSS (utility classes for layout/spacing) -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Google Fonts: Baloo 2 (display/toon headings), Inter (body), JetBrains Mono (numbers/timer) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+<!-- Custom design system / animations -->
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="min-h-screen text-astra-fg">
+
+<!-- ============================================================ -->
+<!-- STARFIELD + 3D BACKGROUND (decorative, purely CSS-driven)     -->
+<!-- ============================================================ -->
+<div class="starfield" aria-hidden="true">
+  <div class="stars stars-sm"></div>
+  <div class="stars stars-md"></div>
+  <div class="stars stars-lg"></div>
+</div>
+
+<!-- Slow color wash that flows from the top of the screen downward -->
+<div class="color-flow" aria-hidden="true"></div>
+
+<!-- Floating 3D shapes: isometric cubes + spinning diamonds for a game-like feel -->
+<div class="scene3d" aria-hidden="true">
+  <div class="cube3d cube3d-1"><div class="face face-top"></div><div class="face face-left"></div><div class="face face-right"></div></div>
+  <div class="cube3d cube3d-2"><div class="face face-top"></div><div class="face face-left"></div><div class="face face-right"></div></div>
+  <div class="cube3d cube3d-3"><div class="face face-top"></div><div class="face face-left"></div><div class="face face-right"></div></div>
+  <div class="diamond3d diamond3d-1"></div>
+  <div class="diamond3d diamond3d-2"></div>
+  <div class="diamond3d diamond3d-3"></div>
+</div>
+
+<!-- Bigger centerpiece 3D box, spinning in full 3D with RGB light glowing
+     around every face as it turns -->
+<div class="rgb-cube-wrap" aria-hidden="true">
+  <div class="rgb-cube">
+    <div class="face face-front"></div>
+    <div class="face face-back"></div>
+    <div class="face face-right"></div>
+    <div class="face face-left"></div>
+    <div class="face face-top"></div>
+    <div class="face face-bottom"></div>
+  </div>
+</div>
+
+<!-- Interactive layer: idle-drifting stars that gather wherever the person
+     is currently typing, with a glowing moon that grows there too. See
+     initTypeStarfield() in script.js. -->
+<canvas id="type-stars-canvas" class="type-stars-canvas" aria-hidden="true"></canvas>
+
+<div class="halftone-overlay" aria-hidden="true"></div>
+<div class="scan-lines" aria-hidden="true"></div>
+
+<div class="relative z-10 flex flex-col min-h-screen">
+
+  <!-- ============================================================ -->
+  <!-- HEADER / PROFILE                                              -->
+  <!-- ============================================================ -->
+  <header class="flex flex-col items-center gap-3 pt-10 pb-6 px-4 text-center">
+    <button id="profile-trigger" class="profile-ring" aria-label="View profile picture full screen">
+      <!-- ⚙️ CONFIG: change the profile picture by swapping this image src -->
+      <img id="profile-pic" src="https://i.ibb.co/bjrb6s4J/IMG-20260519-101257027-HDR.jpg" alt="Raj Dev profile picture" />
+    </button>
+    <div>
+      <h1 class="font-display text-2xl sm:text-3xl font-bold tracking-tight">Raj Dev</h1>
+      <p class="font-display text-astra-cyan text-sm sm:text-base font-semibold tracking-wide uppercase">AstraToonix</p>
+    </div>
+    <p class="max-w-md text-sm text-astra-muted">Answer every question correctly to unlock the victory track. Miss one, and you'll have to try the portal again.</p>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- MAIN                                                          -->
+  <!-- ============================================================ -->
+  <main class="flex-1 flex items-start justify-center px-4 pb-16">
+    <div class="w-full max-w-xl">
+
+      <!-- ---------------- SETUP MODE ---------------- -->
+      <section id="setup-screen" class="card">
+        <h2 class="font-display text-xl font-bold mb-1">Set up your quiz</h2>
+        <p class="text-sm text-astra-muted mb-6">Load a question file, choose how many questions and how much time per question, then launch.</p>
+
+        <!-- Question source -->
+        <div class="mb-5">
+          <label class="field-label" for="json-upload">Question file (.json)</label>
+          <!--
+            ⚙️ CONFIG: Upload a JSON file shaped like this:
+            {
+              "questions": [
+                {
+                  "question": "What is the capital of France?",
+                  "options": ["Berlin", "Madrid", "Paris", "Rome"],
+                  "answer": "Paris"
+                }
+              ]
+            }
+            "answer" can be the exact option text OR the option's index (0-based).
+            You can also skip uploading and click "Use sample questions" below to try it out.
+          -->
+          <input type="file" id="json-upload" accept=".json,.txt,application/json,text/plain" class="file-input" />
+          <div class="flex items-center gap-3 mt-2 flex-wrap">
+            <button id="use-sample-btn" type="button" class="btn-ghost text-xs">Use sample questions</button>
+            <button id="paste-json-toggle" type="button" class="btn-ghost text-xs">Paste JSON instead</button>
+          </div>
+          <span id="question-source-status" class="text-xs text-astra-muted block mt-2">No file loaded yet.</span>
+
+          <!-- Fallback path: if a phone's file picker won't cooperate, this lets
+               the person paste the JSON text directly instead of uploading a file. -->
+          <div id="paste-json-panel" class="hidden mt-3">
+            <textarea id="paste-json-input" rows="6" class="select-input font-mono text-xs" placeholder='{"questions":[{"question":"...","options":["A","B","C","D"],"answer":"A"}]}'></textarea>
+            <button id="paste-json-load" type="button" class="btn-ghost text-xs mt-2">Load pasted JSON</button>
+          </div>
+        </div>
+
+        <!-- Number of questions -->
+        <div class="mb-5">
+          <label class="field-label" for="question-count">Number of questions</label>
+          <!-- A typeable number field, not a limited dropdown — type any amount
+               (10, 100, 500, 900...) up to how many questions you've loaded. -->
+          <input type="number" id="question-count" class="select-input" min="1" step="1" inputmode="numeric" placeholder="e.g. 10" />
+          <p id="question-count-hint" class="text-xs text-astra-muted mt-1.5">Load a question file first.</p>
+        </div>
+
+        <!-- Timer per question -->
+        <div class="mb-5">
+          <label class="field-label" for="timer-select">Time per question</label>
+          <select id="timer-select" class="select-input">
+            <option value="10">10 seconds</option>
+            <option value="15">15 seconds</option>
+            <option value="20" selected>20 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="0">No limit</option>
+          </select>
+        </div>
+
+        <!-- Victory song override (optional) -->
+        <div class="mb-6">
+          <label class="field-label" for="song-upload">Victory song (optional override)</label>
+          <!--
+            ⚙️ CONFIG: By default the victory track is loaded from assets/dur.mp3
+            (see CONFIG.victorySongPath in script.js). If you'd rather pick a file at
+            runtime without editing the repo, use this uploader instead.
+          -->
+          <input type="file" id="song-upload" accept="audio/*" class="file-input" />
+          <span id="song-source-status" class="text-xs text-astra-muted block mt-2">Using default: assets/dur.mp3</span>
+        </div>
+
+        <button id="start-quiz-btn" class="btn-primary w-full" disabled>Start Quiz</button>
+        <p id="setup-error" class="text-xs text-astra-wrong mt-3 hidden"></p>
+      </section>
+
+      <!-- ---------------- QUIZ MODE ---------------- -->
+      <section id="quiz-screen" class="card hidden">
+        <div class="flex items-center justify-between mb-4">
+          <span id="question-progress" class="font-mono text-xs text-astra-muted">Question 1 / 10</span>
+          <div id="timer-badge" class="timer-badge">
+            <span id="timer-value" class="font-mono font-bold">20</span>
+          </div>
+        </div>
+
+        <div class="progress-track mb-6">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+
+        <h2 id="question-text" class="font-display text-lg sm:text-xl font-bold mb-6 leading-snug"></h2>
+
+        <div id="options-list" class="grid grid-cols-1 gap-3" role="list"></div>
+
+        <div id="feedback-banner" class="feedback-banner hidden" role="status" aria-live="polite"></div>
+      </section>
+
+      <!-- ---------------- RESULTS MODE ---------------- -->
+      <section id="results-screen" class="card hidden text-center">
+        <div id="results-icon" class="text-5xl mb-3"></div>
+        <h2 id="results-title" class="font-display text-2xl font-bold mb-2"></h2>
+        <p id="results-subtitle" class="text-astra-muted mb-6"></p>
+
+        <div class="score-ring-wrap mb-6">
+          <div class="score-ring">
+            <span id="score-fraction" class="font-mono font-bold text-xl"></span>
+          </div>
+        </div>
+
+        <div id="victory-player" class="hidden mb-6">
+          <p class="text-sm text-astra-cyan font-semibold mb-2">🏆 Victory track unlocked</p>
+          <!-- ⚙️ CONFIG: the src here is set dynamically in script.js from CONFIG.victorySongPath.
+               controlsList hides the browser's built-in "Download" option and
+               oncontextmenu blocks right-click "Save Audio As…" — a deterrent,
+               not a hard guarantee (see the note in script.js). -->
+          <audio id="victory-audio" controls controlsList="nodownload noplaybackrate noremoteplayback" disablePictureInPicture oncontextmenu="return false" class="w-full"></audio>
+        </div>
+
+        <button id="retry-btn" class="btn-primary w-full mb-3">Try Again</button>
+        <button id="new-quiz-btn" class="btn-ghost w-full">New Setup</button>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- FOOTER                                                        -->
+  <!-- ============================================================ -->
+  <footer class="text-center py-6 px-4 text-xs text-astra-muted">
+    <p>Made by <span class="text-astra-fg font-semibold">Raj Dev</span> · YouTube: <span class="text-astra-cyan font-semibold">AstraToonix</span></p>
+  </footer>
+</div>
+
+<!-- ============================================================ -->
+<!-- PROFILE LIGHTBOX MODAL                                        -->
+<!-- ============================================================ -->
+<div id="profile-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Profile picture full screen">
+  <button id="modal-close" class="modal-close" aria-label="Close">&times;</button>
+  <img id="modal-img" src="" alt="Raj Dev full screen profile picture" class="modal-img" />
+</div>
+
+<!-- ============================================================ -->
+<!-- CONFETTI CANVAS (correct-answer celebration)                  -->
+<!-- ============================================================ -->
+<canvas id="confetti-canvas" class="confetti-canvas"></canvas>
+
+<!-- ============================================================ -->
+<!-- AUDIO CUES                                                    -->
+<!-- ============================================================ -->
+<!-- ⚙️ CONFIG: place a file at assets/wrong-sound.mp3 to override the built-in beep -->
+<audio id="wrong-audio" preload="auto"></audio>
+
+<script src="script.js"></script>
+</body>
+</html>
