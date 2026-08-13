@@ -1,89 +1,76 @@
-# AstraToonix Quiz Portal
+# Leaderboard Backend (FastAPI + MongoDB)
 
-A responsive, interactive quiz app built with HTML, Tailwind CSS, and vanilla JavaScript. No backend, no build step — ready to host on GitHub Pages.
+Chhota sa API jo quiz ke scores MongoDB mein save karta hai aur ek
+leaderboard (top scorers) deta hai. Frontend (GitHub Pages waala static
+quiz) isko HTTPS ke through call karta hai.
 
-## Files
+## 1. MongoDB Atlas — free cluster banao (5 min)
 
-- `index.html` — page structure
-- `style.css` — design tokens, animations (starfield, profile ring, confetti, feedback states)
-- `script.js` — quiz engine + `CONFIG` object (edit this first for quick customization)
-- `sample-questions.json` — General Knowledge category (425 questions)
-- `questions/indian-state-capitals.json` — Indian State & UT Capitals category (28 questions)
-- `assets/` — put your audio files here (create this folder if it doesn't exist)
+1. https://www.mongodb.com/cloud/atlas/register par jaake free account banao.
+2. "Build a Database" → **M0 Free** tier select karo → koi bhi region (nearest, e.g. Mumbai) → "Create".
+3. **Database Access** (left sidebar) → "Add New Database User":
+   - Username/password set karo (yeh yaad rakhna, connection string mein use hoga).
+   - Role: "Read and write to any database".
+4. **Network Access** (left sidebar) → "Add IP Address" → **"Allow Access from Anywhere"** (0.0.0.0/0) select karo. Render jaise cloud host se connect karne ke liye yeh zaroori hai kyunki Render ka IP fixed nahi hota.
+5. **Database** (left sidebar) → apne cluster ke saamne "Connect" → **"Drivers"** → language: Python.
+   - Ek connection string milega jaisa:
+     ```
+     mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+     ```
+   - `<username>` aur `<password>` apni values se replace karo. Yeh string hi tumhara `MONGODB_URI` hai.
 
-## Hosting on GitHub Pages
+Bas — koi table/schema pehle se banane ki zaroorat nahi, MongoDB pehli write pe khud collection bana lega.
 
-1. Create a new GitHub repository (or use an existing one).
-2. Upload `index.html`, `style.css`, `script.js`, `sample-questions.json`, the `questions/` folder, and an `assets/` folder containing your MP3 files.
-3. In the repo, go to **Settings → Pages**, set the source branch (usually `main`) and folder (`/root`), then save.
-4. Your quiz will be live at `https://<your-username>.github.io/<repo-name>/`.
+## 2. Backend ko Render pe deploy karo
 
-## Question categories
+1. Is `backend/` folder ko apne GitHub repo mein push karo (alag repo bhi chalega, ya same repo mein `backend/` subfolder — dono theek hai).
+2. https://render.com par jaake "New +" → **"Web Service"** → apna GitHub repo connect karo.
+3. Settings:
+   - **Root Directory**: `backend` (agar same repo mein hai)
+   - **Runtime**: Python 3
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+4. **Environment** tab mein yeh variables add karo (`.env.example` dekho):
+   - `MONGODB_URI` — step 1 ka connection string
+   - `MONGODB_DB` — `astratoonix_quiz` (ya jo naam chaho)
+   - `API_KEY` — koi bhi random string bana lo (frontend isi ko bhejega)
+   - `ALLOWED_ORIGINS` — tumhari GitHub Pages URL, e.g. `https://raj-dev-01.github.io`
+5. "Create Web Service" — Render build karke ek URL dega jaisa:
+   `https://astratoonix-leaderboard.onrender.com`
 
-Setup mode has a **"Choose a question category"** dropdown — pick one and it loads immediately:
+**Note:** Render ke free tier pe service kuchh der inactive rehne pe "sleep" ho jaati hai — pehli request thodi slow (10-30 sec) ho sakti hai jab woh wake hoti hai. Yeh normal hai.
 
-- **General Knowledge** — the 425-question sample bank in `sample-questions.json`.
-- **भारत के राज्यों की राजधानियाँ (Indian State Capitals)** — all 28 Indian states, in `questions/indian-state-capitals.json`.
+## 3. Frontend ko connect karo
 
-By default the run uses every question in whichever category you pick, drawn in a fresh random order and starting from a random question each time (so no two runs — and no two people — see the same question first). You can still type a smaller number in "Number of questions" for a shorter run.
-
-### Adding your own category
-
-1. Create a new `.json` file shaped like this:
-
-```json
-{
-  "questions": [
-    {
-      "question": "What is the capital of France?",
-      "options": ["Berlin", "Madrid", "Paris", "Rome"],
-      "answer": "Paris"
-    }
-  ]
-}
-```
-
-`answer` can be the exact text of the correct option, or its position in the `options` array starting at `0`.
-
-2. Add one entry to `CONFIG.questionCategories` in `script.js`:
+`script.js` ke CONFIG object mein yeh do lines update karo:
 
 ```js
-{ id: 'my-category', label: 'My Category Name', url: 'questions/my-category.json' }
+apiBaseUrl: "https://astratoonix-leaderboard.onrender.com",
+apiKey: "same-random-string-jo-render-mein-daala-tha",
 ```
 
-It'll show up in the dropdown automatically. You can also skip all this and just use the **"Upload your own .json"** button or **"Paste JSON instead"** in Setup mode for a one-off question set without editing the repo.
+Bas — quiz khatam hone pe score apne aap backend ko chala jayega, aur
+"🏆 Leaderboard" button top scorers dikhayega.
 
-> **Note:** category files load via `fetch()`, which requires the page to be served over http(s) — GitHub Pages works fine. If you open `index.html` directly as a local file, the browser blocks that fetch; the General Knowledge category falls back to a small 6-question built-in set in that case (other categories will show an error instead, since they have no built-in fallback).
+## API quick reference
 
-## Adding your victory song and wrong-answer sound
+| Method | Path | Body / Query | Kya karta hai |
+|---|---|---|---|
+| POST | `/api/submit-score` | `{player_name, score, total, category_id, category_label}` + header `X-API-Key` | Ek attempt save karta hai |
+| GET | `/api/leaderboard?limit=10&best_per_player=true` | — | Top scorers, rank ke saath |
+| GET | `/health` | — | Uptime check |
 
-1. Create an `assets` folder next to `index.html`.
-2. Drop your victory MP3 in as `assets/dur.mp3` (or change the path in `CONFIG.victorySongPath` inside `script.js`).
-3. Optionally add `assets/wrong-sound.mp3` for a custom wrong-answer cue — if it's missing, the app automatically falls back to a built-in beep, so this step is optional.
-4. Alternatively, skip editing the repo entirely and use the "Victory song" file picker in Setup mode to choose an MP3 at runtime (it won't persist between sessions, but it's handy for quick testing).
-5. The player hides the browser's "Download" control and blocks right-click "Save Audio As…" on the victory track. This deters casual downloading but isn't a hard technical guarantee — any audio the browser can play, a determined person can still retrieve via devtools, since the file has to reach the browser to play at all.
+`best_per_player=true` (default) matlab ek hi naam ke multiple attempts
+mein se sirf best wala dikhega, taaki koi baar-baar khelke leaderboard
+spam na kar sake.
 
-## Customizing
+## Local testing (optional)
 
-Open `script.js` and edit the `CONFIG` object at the top:
+```bash
+cd backend
+pip install -r requirements.txt
+cp .env.example .env   # fir .env mein apni values daalo
+uvicorn main:app --reload
+```
 
-- `questionCategories` — the list of categories shown in the Setup dropdown (each is its own JSON file)
-- `sampleQuestions` — small built-in fallback for the General Knowledge category only, used if its fetch fails
-- `defaultTimerSeconds` — default per-question timer
-- `victorySongPath` / `wrongSoundPath` — audio file paths
-- `confettiBurstSize` / `confettiVictoryMultiplier` — celebration intensity
-- `giftBurstSize` / `giftVictoryMultiplier` — gift-emoji burst intensity
-- `speechFeedbackEnabled` / `speechLang` — voice readback of question + answer after each question
-
-To change the profile picture or name, edit the header section directly in `index.html` (look for the `⚙️ CONFIG` comments).
-
-## Background effects
-
-- **Color wash** — a soft band of color flows from the top of the screen down, on a loop (`.color-flow` in `style.css`).
-- **RGB-glow 3D cube** — a bigger box near the top-right spins in full 3D while colored light cycles around its faces (`.rgb-cube-wrap` in `style.css`).
-- **Typing starfield + moon** — background stars idle-drift until you focus a form field, then ease together at that field's position; a glowing moon grows there as you type, and regrows fresh (and bigger, the more you type) wherever you move focus next. This is driven by `initTypeStarfield()` at the bottom of `script.js` (canvas-based, so it stays cheap on mobile) and respects `prefers-reduced-motion`.
-
-## Answer feedback
-
-- **Speaks the question + answer** — after every question, the app reads it out loud in Hindi using the browser's built-in text-to-speech (Web Speech API — no audio file needed): a praise line when you're right ("आपने बहुत अच्छा जवाब दिया! बिल्कुल यही सही उत्तर था: …"), a correction when you're wrong or time runs out ("आपका उत्तर गलत है। इसका सही उत्तर है: …"). Both the question and answer are also shown in the on-screen feedback banner. People can turn the voice off with the "🔊 Speak question + answer" checkbox in Setup mode (`CONFIG.speechFeedbackEnabled` sets the default; the app pauses a little longer before the next question while voice is on, so the line has time to finish).
-- **Gift burst on correct answers** — 🎁🎉⭐ float upward from the bottom of the screen alongside the existing confetti, with an even bigger burst on a perfect score. Tune `CONFIG.giftBurstSize` / `CONFIG.giftVictoryMultiplier`.
+Fir browser mein `http://127.0.0.1:8000/health` khol ke check kar sakte ho.
